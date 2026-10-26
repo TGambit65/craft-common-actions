@@ -126,7 +126,7 @@ exit 0
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp_path = Path(tmpdir)
             tools = self._setup_mock_tools(tmp_path)
-            for bad_ver in ("1.2.3;id", "1.2.3'injection", "1.2.3`touch injected`"):
+            for bad_ver in ("1.2.3;id", "1.2.3'injection", "1.2.3`touch injected`", "1.2.3-rc;id", "1.2.3-rc$(id)"):
                 tarball = self._create_fixture_tarball(tmp_path, filename=f"myapp-{bad_ver}-linux-x86_64.tar.gz")
                 res = subprocess.run(
                     [str(ARCH_SCRIPT), str(tarball), "x86_64", str(tmp_path / "out")],
@@ -136,6 +136,35 @@ exit 0
                 )
                 self.assertNotEqual(res.returncode, 0)
                 self.assertIn("invalid version", res.stderr)
+
+    def test_archive_version_preserved_without_fallback(self):
+        # Numeric trailing -N intentionally keeps the legacy package-release meaning.
+        # These fixtures do not establish native Arch prerelease/final ordering.
+        for raw, pkgver, pkgrel in (
+            ("1.2.3", "1.2.3", "1"),
+            ("1.2.3-rc.1", "1.2.3.rc.1", "1"),
+            ("1.2.3-rc-next+build.7", "1.2.3.rc.next+build.7", "1"),
+            ("1.2.3-2", "1.2.3", "2"),
+        ):
+            with self.subTest(version=raw), tempfile.TemporaryDirectory() as tmpdir:
+                tmp_path = Path(tmpdir)
+                tarball = self._create_fixture_tarball(
+                    tmp_path, filename=f"myapp-{raw}-linux-x86_64.tar.gz")
+                tools = self._setup_mock_tools(tmp_path)
+                capture = tmp_path / "capture"
+                capture.mkdir()
+                output = tmp_path / "out"
+                res = subprocess.run(
+                    [str(ARCH_SCRIPT), str(tarball), "x86_64", str(output)],
+                    capture_output=True, text=True,
+                    env={**os.environ, "PATH": f"{tools}:{os.environ['PATH']}",
+                         "MOCK_CAPTURE": str(capture), "PKGREL": "1"},
+                )
+                self.assertEqual(res.returncode, 0, res.stderr)
+                pkgbuild = (capture / "PKGBUILD").read_text().splitlines()
+                self.assertIn(f"pkgver={pkgver}", pkgbuild)
+                self.assertIn(f"pkgrel={pkgrel}", pkgbuild)
+                self.assertTrue((output / f"myapp-{raw}-linux-x86_64.pkg.tar.zst").exists())
 
     def test_invalid_pkgrel_rejected(self):
         with tempfile.TemporaryDirectory() as tmpdir:

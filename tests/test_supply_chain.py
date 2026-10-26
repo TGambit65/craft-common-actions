@@ -54,6 +54,12 @@ class SupplyChainOptInTests(unittest.TestCase):
         self.assertEqual(sbom["with"]["upload-release-assets"], "false")
         self.assertEqual(sbom["with"]["format"], "cyclonedx-json")
 
+    def test_sbom_upload_has_explicit_repository_without_checkout(self):
+        steps = self.supply["jobs"]["attest"]["steps"]
+        upload = next(step for step in steps if step.get("name") == "Attach the SBOM to the draft release")
+        self.assertEqual(upload["env"]["GH_REPO"], "${{ github.repository }}")
+        self.assertIn("gh release upload", upload["run"])
+
     def test_artifact_download_preserves_artifact_boundaries(self):
         steps = self.supply["jobs"]["attest"]["steps"]
         download = next(step for step in steps if step.get("name") == "Download release artifacts")

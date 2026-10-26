@@ -71,6 +71,7 @@ jobs:
 
       - name: Attach the SBOM to the draft release
         env:
+          GH_REPO: ${{ github.repository }}
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ inputs.version }}
         run: |

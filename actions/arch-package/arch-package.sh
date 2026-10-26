@@ -71,7 +71,7 @@ fi
 
 # Detect application name and version
 tar_basename="$(basename "$tarball" .tar.gz)"
-if [[ "$tar_basename" =~ ^([a-zA-Z0-9_-]+)-([0-9]+\.[0-9]+\.[0-9]+[^-_]*)-linux-([a-zA-Z0-9_]+)$ ]]; then
+if [[ "$tar_basename" =~ ^([a-zA-Z0-9_-]+)-([0-9]+\.[0-9]+\.[0-9]+[^_]*)-linux-([a-zA-Z0-9_]+)$ ]]; then
   app="${BASH_REMATCH[1]}"
   raw_version="${BASH_REMATCH[2]}"
 else
@@ -91,16 +91,21 @@ if [[ ! "$app" =~ ^[a-zA-Z0-9][a-zA-Z0-9_+.-]*$ ]]; then
   die "invalid application name derived from archive: '$app'"
 fi
 
-# Format Arch pkgver (no hyphens or tildes allowed in pkgver)
-upstream="${raw_version%-*}"
-if [[ "$upstream" != "$raw_version" ]]; then
+# Validate the whole archive version before splitting any suffix; a discarded
+# suffix must not hide shell metacharacters from the PKGBUILD validation below.
+[[ "$raw_version" =~ ^[A-Za-z0-9.+-]+$ ]] || die "invalid version derived from archive: '$raw_version'"
+# Retain the legacy trailing -N package-release convention (not semver numeric
+# prerelease semantics). Preserve other prerelease labels in the Arch version.
+upstream="$raw_version"
+if [[ "$raw_version" == *-* ]]; then
   rel="${raw_version##*-}"
   if [[ "$rel" =~ ^[0-9]+$ ]]; then
+    upstream="${raw_version%-*}"
     pkgrel="$rel"
   fi
 fi
-pkgver="${upstream//\~/}"
-pkgver="${pkgver//-/}"
+# Arch pkgver cannot contain hyphens. Native vercmp ordering is a separate gate.
+pkgver="${upstream//-/.}"
 # pkgver, pkgrel and the license words are written into PKGBUILD, which makepkg sources as
 # Bash; the tarball name and the environment are not trusted to be shell-safe.
 [[ "$pkgver" =~ ^[A-Za-z0-9._+]+$ ]] || die "invalid version derived from archive: '$pkgver'"
